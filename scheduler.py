@@ -63,7 +63,7 @@ def ftpdownloadfiles():
 
     print("Files uploaded to projekt-daten/DLR/Wetterdaten at %s" % datetime.now())
 
-#Starting prometheus server
+#Starting prometheus http server
 start_http_server(8000)
 
 #Adding the ftpdownloadfiles function to the scheduler that runs every 5 seconds for the purpose of testing
