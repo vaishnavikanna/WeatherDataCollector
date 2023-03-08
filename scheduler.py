@@ -39,37 +39,23 @@ def ftpdownloadfiles():
     ftp_server.cwd(path)
     filenames = ftp_server.nlst()
     print('Files retrieved at: %s' % datetime.now())
+
+    #Checking if project bucket exists in minio
     project_bucket = client.bucket_exists("projekt-daten")
     if not project_bucket:
         print("Bucket 'projekt-daten' does not exist")
     else:
         print("Bucket 'projekt-daten' already exists")
 
+    #Retrieving the byte stream of the files from ftp server and uploading the bytestream to Minio in the path projekt-data/DLR/Wetterdaten
     for filename in filenames:
         file_bytes = BytesIO()
         ftp_server.retrbinary("RETR "+ filename, file_bytes.write)
         file_bytes.seek(0)
         if project_bucket:
             client.put_object("projekt-daten", "DLR/Wetterdaten/" + filename, file_bytes, length = len(file_bytes.getbuffer()))
+        # Deleting files in ftp after upload to minio
         ftp_server.delete(filename)
-
-    #print(filenames)
-
-
-    #checking for projekt-daten bucket in Minio
-
-    #Every file retrieved from ftp is uploaded to the projekt-daten bucket in Minio and is placed under DLR/Wetterdaten folder
-    # after which the files are deleted from ftp
-    '''
-    for filename in filenames:
-        if filename:
-            client.fput_object(
-                    "projekt-daten", "DLR/Wetterdaten/" + filename,
-                    filename
-                )
-
-            ftp_server.delete(filename)
-    '''
 
 
     #closing connection to ftp server
@@ -80,7 +66,7 @@ def ftpdownloadfiles():
 #Starting prometheus http server
 start_http_server(8000)
 
-#Adding the ftpdownloadfiles function to the scheduler that runs every 5 seconds for the purpose of testing
+#Adding the ftpdownloadfiles function to the scheduler that runs every one hour at the start of the hour
 if __name__ == '__main__':
     scheduler = BackgroundScheduler()
     trigger = CronTrigger(
