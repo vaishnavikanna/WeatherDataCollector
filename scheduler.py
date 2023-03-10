@@ -3,6 +3,7 @@ import time
 import os
 from ftplib import FTP_TLS
 from io import BytesIO
+from dotenv.main import load_dotenv
 
 from minio import Minio
 from prometheus_client import Counter, start_http_server
@@ -13,18 +14,21 @@ from apscheduler.triggers.cron import CronTrigger
 #Prometheus Counter initialized to monitor the number of objects uploaded to Minio
 objects_created = Counter('Objects_created', 'The total number of objects created in Minio')
 
+#loading environment variables
+load_dotenv()
+
 def ftpdownloadfiles():
     #credentials for ftp login
     HOSTNAME = "dlr-web-ftp1.aspdienste.de"
-    USERNAME = "uni_koblenz_iwvi"
-    PASSWORD = "Nv30yOXLiA5$5LtM62.6g"
+    USERNAME = os.environ['FTP_USERNAME']
+    PASSWORD = os.environ['FTP_PASSWORD']
     PORT = 21
 
     #credentials to connect to Minio
     client = Minio(
         "data.smarter-weinberg.de:9000",
-        access_key="J0lSpWY1rNulijB2",
-        secret_key="qhjjTwA56aRcIDQvTorT131pYrWtXzme",
+        access_key= os.environ['MINIO_ACCESS_KEY'],
+        secret_key= os.environ['MINIO_SECRET_KEY'],
         secure=False
     )
     ftp_server = FTP_TLS(host=HOSTNAME)
