@@ -1,13 +1,10 @@
 from datetime import datetime
-import time
 import os
-from ftplib import FTP_TLS
-from io import BytesIO
+import time
 from dotenv.main import load_dotenv
-
 from minio import Minio
 from prometheus_client import Counter, start_http_server
-
+from ftpretty import ftpretty
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -16,6 +13,7 @@ objects_created = Counter('Objects_created', 'The total number of objects create
 
 #loading environment variables
 load_dotenv()
+
 
 def ftpdownloadfiles():
     #credentials for ftp login
@@ -31,17 +29,24 @@ def ftpdownloadfiles():
         secret_key= os.environ['MINIO_SECRET_KEY'],
         secure=False
     )
-    ftp_server = FTP_TLS(host=HOSTNAME)
-    # Connect FTP Server
-    ftp_server.connect(host=HOSTNAME, port=PORT)
-    ftp_server.login(user=USERNAME, passwd=PASSWORD)
+
+    #Using ftpretty to connect to ftp server
+    ftp_server = ftpretty(host=HOSTNAME, user=USERNAME, password=PASSWORD, secure=True, timeout=300, port=PORT)
     ftp_server.prot_p()
     ftp_server.encoding = "utf-8"
 
+
+    #ftp_server.put(os.path.join(os.getcwd(), 'RLP_108_Neef_202303071625.csv'), 'out/wetterdaten/10min/RLP_108_Neef_202303071625.csv')
+
     #path in ftp server from where the files are retrieved
     path = 'out/wetterdaten/10min/'
-    ftp_server.cwd(path)
-    filenames = ftp_server.nlst()
+
+    #switching to the specified path in ftp
+    ftp_server.cd(path)
+
+    #list of files in the specified path
+    filenames = ftp_server.list()
+
     print('Files retrieved at: %s' % datetime.now())
 
     #Checking if project bucket exists in minio
@@ -51,24 +56,52 @@ def ftpdownloadfiles():
     else:
         print("Bucket 'projekt-daten' already exists")
 
-    #Retrieving the byte stream of the files from ftp server and uploading the bytestream to Minio in the path projekt-data/DLR/Wetterdaten
+    #Retrieving the list of files in the specified path from ftp and uploading to Minio
     for filename in filenames:
-        file_bytes = BytesIO()
-        ftp_server.retrbinary("RETR "+ filename, file_bytes.write)
-        file_bytes.seek(0)
-        if project_bucket:
-            client.put_object("projekt-daten", "DLR/Wetterdaten/" + filename, file_bytes, length = len(file_bytes.getbuffer()))
-        # Deleting files in ftp after upload to minio
-        ftp_server.delete(filename)
+        #establishing a new conection to retrieve each file from ftp
+        ftp_server = ftpretty(host=HOSTNAME, user=USERNAME, password=PASSWORD, secure=True, timeout=300, port=PORT)
+        ftp_server.prot_p()
+        ftp_server.encoding = "utf-8"
+        ftp_server.cd(path)
+
+        #creating a local copy to save the retrieved file from ftp
+        local_copy = open(filename, 'wb')
+
+        #Reattempting three times in case of EOF exception
+        for i in range(3):
+            try:
+                #retriveing the file from ftp and writing to local copy
+                ftp_server.get(filename, local_copy)
+                #uploading the retrieved file to Minio
+                if project_bucket:
+                    client.fput_object("projekt-daten", "DLR/Wetterdaten/" + filename, filename)
+                break
+            #catching EOF exception and reattempting
+            except EOFError:
+                print(f"EOFError occurred, trying again(attempt {i+1})")
+
+        #closing each file
+        local_copy.close()
+
+    #Deleting downloaded files from local and from ftp server
+    for file in filenames:
+        if os.path.exists(file):
+            os.remove(file)
+        else:
+            print("File not found")
+        ftp_server.delete(file)
+
+    print("Files successfully deleted from local disk and remote ftp server")
 
 
     #closing connection to ftp server
-    ftp_server.quit()
+    ftp_server.close()
 
     print("Files uploaded to projekt-daten/DLR/Wetterdaten at %s" % datetime.now())
 
 #Starting prometheus http server
 start_http_server(8000)
+#ftpdownloadfiles()
 
 #Adding the ftpdownloadfiles function to the scheduler that runs every one hour at the start of the hour
 if __name__ == '__main__':
