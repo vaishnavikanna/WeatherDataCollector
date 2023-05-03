@@ -8,12 +8,13 @@ from ftpretty import ftpretty
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-#Prometheus Counter initialized to monitor the number of objects uploaded to Minio
-objects_created = Counter('Objects_created', 'The total number of objects created in Minio')
 
 #loading environment variables
 load_dotenv()
-
+# Starting prometheus http server
+start_http_server(8000)
+# Prometheus Counter initialized to monitor the number of objects uploaded to Minio
+objects_created = Counter('Objects_created', 'The total number of objects created in Minio')
 
 def ftpdownloadfiles():
     #credentials for ftp login
@@ -34,9 +35,6 @@ def ftpdownloadfiles():
     ftp_server = ftpretty(host=HOSTNAME, user=USERNAME, password=PASSWORD, secure=True, timeout=300, port=PORT)
     ftp_server.prot_p()
     ftp_server.encoding = "utf-8"
-
-
-    #ftp_server.put(os.path.join(os.getcwd(), 'RLP_108_Neef_202303071625.csv'), 'out/wetterdaten/10min/RLP_108_Neef_202303071625.csv')
 
     #path in ftp server from where the files are retrieved
     path = 'out/wetterdaten/10min/'
@@ -72,6 +70,7 @@ def ftpdownloadfiles():
             try:
                 #retriveing the file from ftp and writing to local copy
                 ftp_server.get(filename, local_copy)
+                objects_created.inc()
                 #uploading the retrieved file to Minio
                 if project_bucket:
                     client.fput_object("projekt-daten", "DLR/Wetterdaten/" + filename, filename)
@@ -99,20 +98,18 @@ def ftpdownloadfiles():
 
     print("Files uploaded to projekt-daten/DLR/Wetterdaten at %s" % datetime.now())
 
-#Starting prometheus http server
-start_http_server(8000)
-#ftpdownloadfiles()
+
 
 #Adding the ftpdownloadfiles function to the scheduler that runs every one hour at the start of the hour
 if __name__ == '__main__':
+
     scheduler = BackgroundScheduler()
     trigger = CronTrigger(
         year="*", month="*", day="*", hour="*", minute="0", second="0"
     )
     scheduler.add_job(ftpdownloadfiles, trigger=trigger)
     scheduler.start()
-    #incrmenting prometheus counter
-    objects_created.inc()
+
     print("Minio Objects" + str(round(objects_created._value.get(), 9)))
 
     print('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))
