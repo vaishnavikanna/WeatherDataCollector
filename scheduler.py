@@ -12,9 +12,9 @@ from apscheduler.triggers.cron import CronTrigger
 #loading environment variables
 load_dotenv()
 # Starting prometheus http server
-start_http_server(8000)
+#start_http_server(8000)
 # Prometheus Counter initialized to monitor the number of objects uploaded to Minio
-objects_created = Counter('Objects_created', 'The total number of objects created in Minio')
+#objects_created = Counter('Objects_created', 'The total number of objects created in Minio')
 
 def ftpdownloadfiles():
     #credentials for ftp login
@@ -70,7 +70,7 @@ def ftpdownloadfiles():
             try:
                 #retriveing the file from ftp and writing to local copy
                 ftp_server.get(filename, local_copy)
-                objects_created.inc()
+                #objects_created.inc()
                 #uploading the retrieved file to Minio
                 if project_bucket:
                     client.fput_object("projekt-daten", "DLR/Wetterdaten/" + filename, filename)
@@ -110,7 +110,7 @@ if __name__ == '__main__':
     scheduler.add_job(ftpdownloadfiles, trigger=trigger)
     scheduler.start()
 
-    print("Minio Objects" + str(round(objects_created._value.get(), 9)))
+    #print("Minio Objects" + str(round(objects_created._value.get(), 9)))
 
     print('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))
 

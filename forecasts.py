@@ -25,10 +25,14 @@ df_coordinates = pd.read_excel(filename, sheet_name='All_Coordinates')
 
 # Function to extract and preprocess required data from the excel file
 def extract_data(df):
+    ausbringungsort = df['Ausbringungsort'].tolist()
+    heights = df['Heights'].tolist()
     df[['Latitude', 'Longitude']] = df['Coordinates'].apply(lambda x: pd.Series(str(x).split(",")))
     df_data = df[['Latitude', 'Longitude']]
-    df_preprocessed = df_data.dropna()
+    df_meta = df_data.assign(Ausbringungsort=ausbringungsort, Heights=heights)
+    df_preprocessed = df_meta.dropna()
     df_preprocessed.reset_index(drop=True, inplace=True)
+    print(ausbringungsort)
     return df_preprocessed
 
 
@@ -57,20 +61,24 @@ def forecasts(df):
     for i in range(len(df)):
         latitude = df.loc[i, 'Latitude']
         longitude = df.loc[i, 'Longitude']
-        api_url = "https://my.meteoblue.com/packages/agro-1h_agromodelleafwetness-1h?apikey=946f8e5caba1&lat=" + latitude + "&lon=" + longitude + "&asl=75&format=json&tz=Europe%2FBerlin"
+        height = df.loc[i, 'Heights']
+        ausbringungsort = df.loc[i, 'Ausbringungsort']
+        api_url = "https://my.meteoblue.com/packages/agro-1h_agromodelleafwetness-1h?apikey=946f8e5caba1&lat=" + latitude + "&lon=" + longitude + "&asl=" + str(height) + "&format=json&tz=Europe%2FBerlin"
         response = requests.get(api_url).json()
+        response['metadata']['height'] = str(height)
+        response['metadata']['Ausbringungsort'] = ausbringungsort
         jsonresponse = json.dumps(response)
 
         # creating a new json file for each sensor for each run
-        with open(str(latitude) + "_" + str(longitude) + "_" + current_time + ".json", 'w') as f:
+        with open(str(ausbringungsort) + "_" + current_time + ".json", 'w') as f:
             f.write(jsonresponse)
 
         # opening the json file created earlier to create a parquet file
-        with open(str(latitude) + "_" + str(longitude) + "_" + current_time + ".json", 'r') as f:
+        with open(str(ausbringungsort) + "_" + current_time + ".json", 'r') as f:
             data = json.loads(f.read())
 
         # normalizing the json to extract only relevant data records using the key data_1h
-        df_json = pd.json_normalize(data=data['data_1h'], sep='_')
+        df_json = pd.json_normalize(data=data['data_1h'], sep='_') #malformed json, no response, no upload, connection issues
         df_dict = df_json.to_dict(orient='records')[0]
         df_data = pd.DataFrame(df_dict)
 
@@ -85,26 +93,44 @@ def forecasts(df):
         # writing data and metadata to parquet format
         # creating a new parquet file if the file does not exist already
         # if the parquet file exists already then data is appended to the existing file with fastparquet
-        if not os.path.isfile(str(latitude) + "_" + str(longitude) + ".parquet"):
-            write(str(latitude) + "_" + str(longitude) + ".parquet", df_data, custom_metadata=custom_metadata)
+        if not os.path.isfile(str(ausbringungsort) + ".parquet"):
+            write(str(ausbringungsort) + ".parquet", df_data, custom_metadata=custom_metadata)
         else:
-            write(str(latitude) + "_" + str(longitude) + ".parquet", df_data, custom_metadata=custom_metadata, append=True)
+            write(str(ausbringungsort) + ".parquet", df_data, custom_metadata=custom_metadata, append=True)
 
         # adding json files to minio bucket
         if project_bucket:
             client.fput_object("projekt-daten", "UniKo/Egov/WetterDaten/Meteoblue/json-formatted/" + os.path.basename(f.name), f.name)
 
     # adding parquet files to minio bucket
-    extension = "*.parquet"
-    parquet_files_list = [f for f in glob.glob(extension)]
+    parquet_extension = "*.parquet"
+    parquet_files_list = [f for f in glob.glob(parquet_extension)]
     for parquet_file_name in parquet_files_list:
         if project_bucket:
             client.fput_object("projekt-daten", "UniKo/Egov/WetterDaten/Meteoblue/parquet-formatted/" + parquet_file_name, parquet_file_name)
 
     print("Successful responses uploaded to Minio")
 
+    #Deleting json and parquet files from local
+    json_extension = "*.json"
+    json_files_list = [f for f in glob.glob(json_extension)]
+
+    for json_filename in json_files_list:
+        if os.path.exists(json_filename):
+            os.remove(json_filename)
+        else:
+            print("File not found")
+
+    for parquet_filename in parquet_files_list:
+        if os.path.exists(parquet_filename):
+            os.remove(parquet_filename)
+        else:
+            print("File not found")
+    print("Json and Parquet response files removed from local")
 
 
+
+'''
 #adding forecasts function to the scheduler that makes api calls each hour
 if __name__ == '__main__':
 
@@ -122,6 +148,7 @@ if __name__ == '__main__':
             time.sleep(2)
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()
+'''
 
+forecasts(df_response)
 
-#forecasts(df_response)
