@@ -18,7 +18,7 @@ load_dotenv()
 
 def ftpdownloadfiles():
     #credentials for ftp login
-    HOSTNAME = "dlr-web-ftp1.aspdienste.de"
+    HOSTNAME = "##################"
     USERNAME = os.environ['FTP_USERNAME']
     PASSWORD = os.environ['FTP_PASSWORD']
     PORT = 21
