@@ -63,7 +63,7 @@ def forecasts(df):
         longitude = df.loc[i, 'Longitude']
         height = df.loc[i, 'Heights']
         ausbringungsort = df.loc[i, 'Ausbringungsort']
-        api_url = "https://my.meteoblue.com/packages/agro-1h_agromodelleafwetness-1h?apikey=946f8e5caba1&lat=" + latitude + "&lon=" + longitude + "&asl=" + str(height) + "&format=json&tz=Europe%2FBerlin"
+        api_url = "https://my.meteoblue.com/packages/agro-1h_agromodelleafwetness-1h?apikey=##############&lat=" + latitude + "&lon=" + longitude + "&asl=" + str(height) + "&format=json&tz=Europe%2FBerlin"
         response = requests.get(api_url).json()
         response['metadata']['height'] = str(height)
         response['metadata']['Ausbringungsort'] = ausbringungsort
